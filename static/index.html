@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>声记工坊 | VoiceNote Forge</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+    
+    <!-- Background Glow Effects -->
+    <div class="bg-glow bg-glow-purple"></div>
+    <div class="bg-glow bg-glow-cyan"></div>
+    
+    <div id="app">
+        <!-- 1. AUTH SCREEN (Register/Login) -->
+        <div id="auth-screen" class="view-container active">
+            <div class="auth-card glassmorphism">
+                <div class="auth-header">
+                    <div class="logo">
+                        <i class="fa-solid fa-microphone-lines logo-icon"></i>
+                        <span>声记工坊</span>
+                    </div>
+                    <p class="subtitle">VoiceNote Forge</p>
+                </div>
+                
+                <div class="auth-tabs">
+                    <button class="auth-tab active" onclick="switchAuthTab('login')">登录</button>
+                    <button class="auth-tab" onclick="switchAuthTab('register')">注册</button>
+                </div>
+                
+                <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+                    <div class="input-group">
+                        <label for="username"><i class="fa-solid fa-user"></i> 用户名</label>
+                        <input type="text" id="username" required autocomplete="username" placeholder="请输入用户名...">
+                    </div>
+                    <div class="input-group">
+                        <label for="password"><i class="fa-solid fa-lock"></i> 密码</label>
+                        <input type="password" id="password" required autocomplete="current-password" placeholder="请输入密码...">
+                    </div>
+                    
+                    <button type="submit" id="auth-btn" class="btn btn-primary btn-block">
+                        <span class="btn-text">登录系统</span>
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+                <div id="auth-error" class="error-text hidden"></div>
+            </div>
+        </div>
+
+        <!-- 2. MAIN DASHBOARD -->
+        <div id="dashboard-screen" class="view-container">
+            <!-- Header Bar -->
+            <header class="main-header glassmorphism">
+                <div class="header-left">
+                    <div class="logo">
+                        <i class="fa-solid fa-microphone-lines logo-icon"></i>
+                        <span>声记工坊</span>
+                    </div>
+                    <span class="version-tag">MVP v1.0</span>
+                </div>
+                
+                <div class="header-right">
+                    <!-- Feishu Status Badge -->
+                    <div id="feishu-status-panel" class="feishu-badge">
+                        <i class="fa-brands fa-lark feishu-icon"></i>
+                        <span id="feishu-status-text">检查绑定状态...</span>
+                        <button id="feishu-action-btn" class="btn btn-sm btn-outline-success" onclick="handleFeishuAction()">
+                            绑定飞书
+                        </button>
+                    </div>
+                    
+                    <!-- User Info & Logout -->
+                    <div class="user-profile">
+                        <span class="avatar"><i class="fa-solid fa-circle-user"></i></span>
+                        <span id="user-display-name">用户名</span>
+                        <button class="btn-icon" onclick="handleLogout()" title="退出登录">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Dashboard Grid Layout -->
+            <main class="dashboard-grid">
+                <!-- Left Panel: Create Task -->
+                <section class="task-creation-panel">
+                    <div class="panel-card glassmorphism">
+                        <h3><i class="fa-solid fa-circle-plus"></i> 新建转写任务</h3>
+                        
+                        <div class="task-tabs">
+                            <button class="task-tab active" onclick="switchTaskTab('feishu')">
+                                <i class="fa-brands fa-lark"></i> 飞书妙记
+                            </button>
+                            <button class="task-tab" onclick="switchTaskTab('local')">
+                                <i class="fa-solid fa-computer"></i> 本地 ASR
+                            </button>
+                        </div>
+                        
+                        <!-- Feishu Task Form -->
+                        <div id="feishu-task-form" class="task-form active">
+                            <p class="form-desc">输入飞书妙记的分享链接或 24 位 Token，系统将自动使用您的飞书身份进行文字提取与 Markdown 转换。</p>
+                            
+                            <div class="input-group">
+                                <label for="feishu-token-input">飞书妙记链接 或 Token</label>
+                                <input type="text" id="feishu-token-input" placeholder="https://sample.feishu.cn/minutes/obcnq3...">
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="feishu-title-input">任务标题 (可选)</label>
+                                <input type="text" id="feishu-title-input" placeholder="如果不填，将自动获取会议原标题">
+                            </div>
+                            
+                            <button class="btn btn-primary btn-block" onclick="submitFeishuTask()">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> 启动飞书转换
+                            </button>
+                        </div>
+                        
+                        <!-- Local ASR Task Form -->
+                        <div id="local-task-form" class="task-form">
+                            <p class="form-desc">
+                                上传您的本地会议音频，系统将使用本地服务器进行 ASR 语音识别与说话人聚类对齐。
+                                <span class="asr-badge" id="asr-status-badge">检测中...</span>
+                            </p>
+                            
+                            <!-- Drag & Drop Zone -->
+                            <div class="drag-drop-zone" id="drop-zone" onclick="triggerFileInput()">
+                                <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                                <p class="drag-text">拖拽音频文件到此处 或 <span class="browse-link">浏览文件</span></p>
+                                <p class="file-limits">支持格式: mp3, wav, m4a, aac, mp4 (最大 100MB)</p>
+                                <input type="file" id="file-input" class="hidden" accept=".mp3,.wav,.m4a,.aac,.mp4" onchange="handleFileSelect(event)">
+                            </div>
+                            
+                            <div id="selected-file-info" class="selected-file-info hidden">
+                                <i class="fa-solid fa-file-audio"></i>
+                                <span id="selected-file-name" class="file-name">filename.mp3</span>
+                                <button class="btn-icon btn-danger-icon" onclick="clearSelectedFile()"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="local-title-input">任务标题 (可选)</label>
+                                <input type="text" id="local-title-input" placeholder="如果不填，将使用音频文件名">
+                            </div>
+                            
+                            <button class="btn btn-cyan btn-block" id="local-submit-btn" onclick="submitLocalTask()">
+                                <i class="fa-solid fa-bolt"></i> 开始本地转写
+                            </button>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Right Panel: Tasks List -->
+                <section class="task-list-panel">
+                    <div class="panel-card glassmorphism flex-column">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-list-check"></i> 任务队列</h3>
+                            <button class="btn-icon" onclick="loadTaskList()" title="刷新列表">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="task-list-wrapper" id="task-list-container">
+                            <!-- Tasks injected dynamically -->
+                            <div class="empty-state">
+                                <i class="fa-solid fa-inbox"></i>
+                                <p>暂无正在进行或历史任务</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- 3. WORKSPACE OVERLAY (Split View: Speaker Mapping + Markdown Preview) -->
+        <div id="workspace-screen" class="view-container">
+            <header class="workspace-header glassmorphism">
+                <button class="btn btn-outline" onclick="closeWorkspace()">
+                    <i class="fa-solid fa-chevron-left"></i> 返回主面板
+                </button>
+                <div class="workspace-title-section">
+                    <span class="badge" id="ws-type-badge">飞书妙记</span>
+                    <h2 id="ws-task-title">会议名称</h2>
+                </div>
+                <div class="workspace-actions">
+                    <button class="btn btn-primary" onclick="downloadMarkdown()">
+                        <i class="fa-solid fa-download"></i> 下载 MD 文件
+                    </button>
+                </div>
+            </header>
+            
+            <div class="workspace-split">
+                <!-- Left Column: Speaker Mapping -->
+                <div class="workspace-left glassmorphism">
+                    <div class="section-title">
+                        <h3><i class="fa-solid fa-users-gear"></i> 说话人别名映射</h3>
+                        <p>将识别出的通用说话人名称（如“说话人 1”）更改为团队真实姓名，系统将自动重新渲染 Markdown 发言记录。</p>
+                    </div>
+                    
+                    <div id="speaker-mapping-list" class="speaker-mapping-list">
+                        <!-- Speakers list injected dynamically -->
+                    </div>
+                    
+                    <div class="mapping-actions">
+                        <button class="btn btn-cyan btn-block" onclick="applySpeakerMapping()">
+                            <i class="fa-solid fa-floppy-disk"></i> 应用映射修改
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Right Column: Live Markdown Preview -->
+                <div class="workspace-right glassmorphism">
+                    <div class="preview-header">
+                        <h3><i class="fa-solid fa-file-lines"></i> 实时文档预览 (Markdown)</h3>
+                        <div class="header-buttons">
+                            <button class="btn btn-sm btn-outline" onclick="copyMarkdownToClipboard()">
+                                <i class="fa-solid fa-copy"></i> 复制内容
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="markdown-preview-container">
+                        <pre id="markdown-raw-view"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <i id="toast-icon" class="fa-solid fa-circle-info"></i>
+        <span id="toast-message">提示信息</span>
+    </div>
+
+    <!-- Script File -->
+    <script src="app.js"></script>
+</body>
+</html>
