@@ -599,13 +599,54 @@ def process_webhook_recording_event(user_id: int, meeting_id: str, open_id: str)
     finally:
         db.close()
 
+def process_webhook_minute_event(user_id: int, minute_token: str):
+    """
+    Background worker triggered by Webhook minutes.minute.generated_v1 event.
+    Creates task -> triggers process directly.
+    """
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.feishu_token:
+            return
+            
+        # Check if task already exists to avoid duplication
+        existing = db.query(Task).filter(
+            Task.user_id == user.id,
+            Task.minute_token == minute_token
+        ).first()
+        if existing:
+            print(f"Task already exists for minute_token {minute_token}")
+            return
+            
+        # Create new Feishu task
+        task_id = str(uuid.uuid4())
+        new_task = Task(
+            id=task_id,
+            user_id=user.id,
+            task_type="feishu",
+            status="pending",
+            title=f"妙记整理_{minute_token[:8]}",
+            minute_token=minute_token,
+            progress=0
+        )
+        db.add(new_task)
+        db.commit()
+        
+        # Trigger actual async transcription processing
+        process_feishu_task(task_id)
+    except Exception as e:
+        print(f"Error processing webhook minute event: {str(e)}")
+    finally:
+        db.close()
+
 from fastapi import Request
 
 @app.post("/api/feishu/events")
 async def feishu_events(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Feishu Open Platform Event webhook callback endpoint.
-    Handles URL verification and recording completion events.
+    Handles URL verification, recording completion, and manual upload/generation events.
     """
     body = await request.json()
     
@@ -636,6 +677,33 @@ async def feishu_events(request: Request, background_tasks: BackgroundTasks, db:
         
         # Dispatch background task to fetch details and process
         background_tasks.add_task(process_webhook_recording_event, user.id, meeting_id, open_id)
+        return {"status": "processing"}
+        
+    elif event_type == "minutes.minute.generated_v1":
+        event_data = body.get("event", {})
+        minute_token = event_data.get("minute_token")
+        
+        # Safe extraction of user open_id across possible payload variations
+        open_id = None
+        if "owner_id" in event_data:
+            open_id = event_data["owner_id"].get("open_id")
+        elif "user_id" in event_data:
+            open_id = event_data["user_id"].get("open_id")
+        elif "operator" in event_data:
+            open_id = event_data["operator"].get("id", {}).get("open_id")
+            
+        if not minute_token or not open_id:
+            return {"status": "ignored", "reason": "missing minute_token or open_id"}
+            
+        # Find local user bound to this Feishu open_id
+        feishu_token = db.query(FeishuToken).filter(FeishuToken.open_id == open_id).first()
+        if not feishu_token:
+            return {"status": "ignored", "reason": "No bound local user found for this open_id"}
+            
+        user = feishu_token.user
+        
+        # Dispatch background task directly since minute_token is provided
+        background_tasks.add_task(process_webhook_minute_event, user.id, minute_token)
         return {"status": "processing"}
         
     return {"status": "ignored", "reason": "event type not handled"}

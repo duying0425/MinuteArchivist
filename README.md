@@ -105,7 +105,9 @@ systemctl --user restart voicenote.service
    - 配置 **“请求网址 (Request URL)”** 为：
      `https://voice.tmhcorps.cn/api/feishu/events`
      *(配置填写并点击保存时，飞书服务器会自动向我们的服务发送 Webhook challenge 握手验证，声记工坊会自动处理并秒过验证)*
-   - 添加事件订阅：在事件列表中添加并勾选 **“录制就绪 (Recording Ready)”** 事件（`vc.meeting.recording_ready_v1`）。
+   - **添加事件订阅**（核心推荐订阅以下两个事件）：
+     - **「妙记生成事件」** (`minutes.minute.generated_v1`)：**【强烈推荐】** 不论是通过会议自动录制，还是**手动在飞书妙记中上传音视频文件**生成的妙记，均会触发该事件，本系统已原生适配此直接推送通道！
+     - **「录制就绪事件」** (`vc.meeting.recording_ready_v1`)：【可选】用于保障常规视频会议录制归档。
 3. **机器人开启**：
    - 在应用管理页开启 **“机器人 (Bot)”** 功能。
 4. **应用版本发布**：
