@@ -20,9 +20,9 @@ if [ ! -d ".venv" ]; then
 fi
 
 # 3. Upgrade pip and install dependencies
-echo "[+] 正在使用阿里云镜像安装/更新项目依赖包..."
-.venv/bin/python3 -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
-.venv/bin/pip install -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+echo "[+] 正在使用清华源镜像安装/更新项目依赖包..."
+.venv/bin/python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
+.venv/bin/pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 echo "[+] 依赖包安装完成。"
 
 # 4. Copy systemd user service configuration
