@@ -1,6 +1,7 @@
 import re
 import requests
 import datetime
+import json
 from sqlalchemy.orm import Session
 from models import FeishuToken
 from config import settings
@@ -167,3 +168,108 @@ def download_minute_transcript(access_token: str, minute_token: str) -> str:
             
     # Success, return text content (decode stream)
     return response.content.decode("utf-8")
+
+def get_tenant_access_token() -> str:
+    """
+    Get tenant_access_token for Feishu Bot app.
+    """
+    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    headers = {
+        "Content-Type": "application/json; charset=utf-8"
+    }
+    payload = {
+        "app_id": settings.FEISHU_APP_ID,
+        "app_secret": settings.FEISHU_APP_SECRET
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    if data.get("code") != 0:
+        raise Exception(f"获取 tenant_access_token 失败: {data.get('msg')}")
+    return data.get("tenant_access_token")
+
+def get_meeting_recording(access_token: str, meeting_id: str) -> dict:
+    """
+    Get meeting recording file list using meeting_id.
+    """
+    url = f"https://open.feishu.cn/open-apis/vc/v1/meetings/{meeting_id}/recording"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    if data.get("code") != 0:
+        raise Exception(f"获取会议录制信息失败: {data.get('msg')}")
+    return data.get("data", {}).get("recording", {})
+
+def send_feishu_card_notification(open_id: str, task_title: str, duration_seconds: float, download_url: str):
+    """
+    Send an interactive bot card message to the user.
+    """
+    tenant_token = get_tenant_access_token()
+    url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
+    headers = {
+        "Authorization": f"Bearer {tenant_token}",
+        "Content-Type": "application/json; charset=utf-8"
+    }
+    
+    if duration_seconds:
+        m = int(duration_seconds // 60)
+        s = int(duration_seconds % 60)
+        duration_str = f"{m}分{s}秒"
+    else:
+        duration_str = "未知"
+        
+    card_content = {
+        "config": {
+            "wide_screen_mode": True
+        },
+        "header": {
+            "template": "purple",
+            "title": {
+                "tag": "plain_text",
+                "content": "🎙️ 会议录制已自动转写编译"
+            }
+        },
+        "elements": [
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**声记工坊已为您完成转写整理：**\n\n会议主题：**{task_title}**\n录制时长：**{duration_str}**\n生成格式：**Markdown (.md)**"
+                }
+            },
+            {
+                "tag": "hr"
+            },
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": "📥 下载 Markdown 会议纪要"
+                        },
+                        "type": "primary",
+                        "url": download_url
+                    }
+                ]
+            }
+        ]
+    }
+    
+    payload = {
+        "receive_id": open_id,
+        "msg_type": "interactive",
+        "content": json.dumps(card_content)
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    if data.get("code") != 0:
+        raise Exception(f"发送机器人消息失败: {data.get('msg')}")
+    return data
+

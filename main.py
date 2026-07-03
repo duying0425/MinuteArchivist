@@ -124,6 +124,21 @@ def process_feishu_task(task_id: str):
         task.error_message = None
         db.commit()
         
+        # Send Feishu Bot Notification if user is bound
+        if user.feishu_token:
+            try:
+                base_host = settings.FEISHU_REDIRECT_URI.replace("/api/auth/feishu/callback", "")
+                download_url = f"{base_host}/api/tasks/public/{task.id}/download"
+                from feishu import send_feishu_card_notification
+                send_feishu_card_notification(
+                    open_id=user.feishu_token.open_id,
+                    task_title=task.title or "视频会议录制",
+                    duration_seconds=task.duration or 0.0,
+                    download_url=download_url
+                )
+            except Exception as notify_err:
+                print(f"Failed to send Feishu Bot notification: {str(notify_err)}")
+        
     except Exception as e:
         task.status = "failed"
         task.progress = 0
@@ -520,6 +535,137 @@ def get_asr_status():
         "has_whisper": HAS_WHISPER,
         "device": "CPU (faster-whisper)" if HAS_WHISPER else "Simulation Mode (仿真测试环境)"
     }
+
+# --- Feishu Webhook Events & Public Download APIs ---
+
+def process_webhook_recording_event(user_id: int, meeting_id: str, open_id: str):
+    """
+    Background worker triggered by Webhook recording event.
+    Fetches recording url -> extracts minute_token -> creates task -> triggers process.
+    """
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.feishu_token:
+            return
+            
+        # Refresh and get valid token
+        access_token = get_valid_token(user.feishu_token, db)
+        
+        # Get meeting recording information
+        from feishu import get_meeting_recording
+        recording_info = get_meeting_recording(access_token, meeting_id)
+        
+        file_list = recording_info.get("recording_file_list", [])
+        if not file_list:
+            print(f"No recording files found for meeting_id {meeting_id}")
+            return
+            
+        url = file_list[0].get("url")
+        if not url:
+            return
+            
+        minute_token = extract_minute_token(url)
+        if not minute_token:
+            return
+            
+        # Check if task already exists to avoid duplication
+        existing = db.query(Task).filter(
+            Task.user_id == user.id,
+            Task.minute_token == minute_token
+        ).first()
+        if existing:
+            print(f"Task already exists for minute_token {minute_token}")
+            return
+            
+        # Create new Feishu task
+        task_id = str(uuid.uuid4())
+        new_task = Task(
+            id=task_id,
+            user_id=user.id,
+            task_type="feishu",
+            status="pending",
+            title=f"会议录制_{meeting_id[:8]}",
+            minute_token=minute_token,
+            progress=0
+        )
+        db.add(new_task)
+        db.commit()
+        
+        # Trigger actual async transcription processing
+        process_feishu_task(task_id)
+    except Exception as e:
+        print(f"Error processing webhook recording event: {str(e)}")
+    finally:
+        db.close()
+
+from fastapi import Request
+
+@app.post("/api/feishu/events")
+async def feishu_events(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Feishu Open Platform Event webhook callback endpoint.
+    Handles URL verification and recording completion events.
+    """
+    body = await request.json()
+    
+    # 1. URL Verification challenge
+    if body.get("type") == "url_verification":
+        return {"challenge": body.get("challenge")}
+        
+    # 2. Parse event headers
+    header = body.get("header", {})
+    event_type = header.get("event_type")
+    
+    if event_type == "vc.meeting.recording_ready_v1":
+        event_data = body.get("event", {})
+        meeting_id = event_data.get("meeting_id")
+        
+        operator = event_data.get("operator", {})
+        open_id = operator.get("id", {}).get("open_id")
+        
+        if not meeting_id or not open_id:
+            return {"status": "ignored", "reason": "missing meeting_id or open_id"}
+            
+        # Find local user bound to this Feishu open_id
+        feishu_token = db.query(FeishuToken).filter(FeishuToken.open_id == open_id).first()
+        if not feishu_token:
+            return {"status": "ignored", "reason": "No bound local user found for this open_id"}
+            
+        user = feishu_token.user
+        
+        # Dispatch background task to fetch details and process
+        background_tasks.add_task(process_webhook_recording_event, user.id, meeting_id, open_id)
+        return {"status": "processing"}
+        
+    return {"status": "ignored", "reason": "event type not handled"}
+
+@app.get("/api/tasks/public/{task_id}/download")
+def public_download_task_markdown(task_id: str, db: Session = Depends(get_db)):
+    """
+    Unauthenticated read-only endpoint for downloading generated Markdown.
+    Used by Feishu Bot Card download buttons.
+    """
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status != "completed":
+        raise HTTPException(status_code=400, detail="任务尚未处理完成，无法下载")
+        
+    output_filename = f"{task.id}.md"
+    file_path = os.path.join(settings.OUTPUT_DIR, output_filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="导出的 Markdown 文件不存在或已丢失")
+        
+    safe_title = re.sub(r'[\/:*?"<>|]', '_', task.title or "会议记录")
+    download_name = f"{safe_title}.md"
+    
+    return FileResponse(
+        path=file_path,
+        media_type="text/markdown",
+        filename=download_name
+    )
 
 # --- Static frontend serving ---
 
