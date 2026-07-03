@@ -1,0 +1,15 @@
+[Unit]
+Description=VoiceNote Forge (声记工坊) Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/MinuteArchivist
+ExecStart=%h/MinuteArchivist/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8090
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/MinuteArchivist/logs/app.log
+StandardError=append:%h/MinuteArchivist/logs/app.log
+
+[Install]
+WantedBy=default.target
