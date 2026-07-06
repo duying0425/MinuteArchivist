@@ -32,7 +32,7 @@ from parser import generate_markdown
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="声记工坊 (VoiceNote Forge)",
+    title="妙记归档员 (MinuteArchivist)",
     description="音频转 Markdown 知识管理工具",
     version="1.0.0"
 )
@@ -594,7 +594,7 @@ def download_task_markdown(
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="导出的 Markdown 文件丢失")
         
-    safe_title = re.sub(r'[\/:*?"<>|]', '_', task.title or "声记工坊转写记录")
+    safe_title = re.sub(r'[\/:*?"<>|]', '_', task.title or "妙记归档员转写记录")
     download_name = f"{safe_title}.md"
     
     return FileResponse(

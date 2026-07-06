@@ -1,9 +1,9 @@
-# VoiceNote Forge (声记工坊) 启动脚本
+# MinuteArchivist (妙记归档员) 启动脚本
 
-$Host.UI.RawUI.WindowTitle = "声记工坊 - VoiceNote Forge"
+$Host.UI.RawUI.WindowTitle = "妙记归档员 - MinuteArchivist"
 
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "   声记工坊 (VoiceNote Forge) 正在初始化启动...   " -ForegroundColor Cyan
+Write-Host "   妙记归档员 (MinuteArchivist) 正在初始化启动...   " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
 # Check if .venv exists

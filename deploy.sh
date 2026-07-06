@@ -1,11 +1,11 @@
 #!/bin/bash
 # ==========================================================================
-# VoiceNote Forge (声记工坊) Automated Deployment Script
+# MinuteArchivist (妙记归档员) Automated Deployment Script
 # ==========================================================================
 set -e
 
 echo "=================================================="
-echo "🚀 开始部署：声记工坊 (VoiceNote Forge) on Aliyun "
+echo "🚀 开始部署：妙记归档员 (MinuteArchivist) on Aliyun "
 echo "=================================================="
 
 # 1. Ensure required directories exist

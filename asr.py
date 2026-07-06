@@ -74,8 +74,8 @@ def run_simulated_asr(filename: str, progress_callback) -> str:
         progress_callback(prog, msg)
         time.sleep(1.2)
         
-    # Generate realistic meeting transcript relevant to VoiceNote Forge (声记工坊)
-    mock_transcript = """[00:00:02] 说话人 1：大家好，我是今天的主持人。我们今天来讨论声记工坊（VoiceNote Forge）的第一阶段产品发布。
+    # Generate realistic meeting transcript relevant to MinuteArchivist (妙记归档员)
+    mock_transcript = """[00:00:02] 说话人 1：大家好，我是今天的主持人。我们今天来讨论妙记归档员（MinuteArchivist）的第一阶段产品发布。
 [00:00:15] 说话人 2：好的，我已经把 FastAPI 后端和 SQLite 数据库的数据表初始化写好了。
 [00:00:27] 说话人 1：太棒了！那我们怎么解决飞书接口大音频文件上传的限制问题？
 [00:00:38] 说话人 3：我们可以提供分片上传来解决，另外我们还设计了本地 ASR 备选路线作为方案 B。

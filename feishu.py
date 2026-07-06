@@ -237,7 +237,7 @@ def send_feishu_card_notification(open_id: str, task_title: str, duration_second
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": f"**声记工坊已为您完成转写整理：**\n\n会议主题：**{task_title}**\n录制时长：**{duration_str}**\n生成格式：**Markdown (.md)**"
+                    "content": f"**妙记归档员已为您完成转写整理：**\n\n会议主题：**{task_title}**\n录制时长：**{duration_str}**\n生成格式：**Markdown (.md)**"
                 }
             },
             {

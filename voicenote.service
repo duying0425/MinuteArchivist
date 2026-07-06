@@ -1,5 +1,5 @@
 [Unit]
-Description=VoiceNote Forge (声记工坊) Service
+Description=MinuteArchivist (妙记归档员) Service
 After=network.target
 
 [Service]

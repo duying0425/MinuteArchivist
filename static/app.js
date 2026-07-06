@@ -582,7 +582,7 @@ function triggerDownload(taskId) {
             if (!res.ok) throw new Error('Download failed');
             // Extract filename from headers if possible, otherwise use fallback
             const contentDisposition = res.headers.get('Content-Disposition');
-            let filename = '声记工坊会议记录.md';
+            let filename = '妙记归档员会议记录.md';
             if (contentDisposition) {
                 const match = contentDisposition.match(/filename="(.+?)"/);
                 if (match) filename = decodeURIComponent(match[1]);
