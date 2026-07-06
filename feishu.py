@@ -128,17 +128,26 @@ def get_minute_metadata(access_token: str, minute_token: str) -> dict:
     """
     Get meeting minutes metadata.
     """
-    url = f"https://open.feishu.cn/open-apis/minutes/v1/minutes/{minute_token}"
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    data = response.json()
-    # Some apps might not have the get minute metadata scope, handle code != 0
-    if data.get("code") != 0:
+    try:
+        url = f"https://open.feishu.cn/open-apis/minutes/v1/minutes/{minute_token}"
+        headers = {
+            "Authorization": f"Bearer {access_token}"
+        }
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            try:
+                err_data = response.json()
+                print(f"Failed to get minute metadata: {err_data.get('msg')} (code: {err_data.get('code')})")
+            except Exception:
+                print(f"Failed to get minute metadata, status code: {response.status_code}")
+            return {}
+        data = response.json()
+        if data.get("code") != 0:
+            return {}
+        return data.get("data", {}).get("minute", {})
+    except Exception as e:
+        print(f"Error occurred in get_minute_metadata: {str(e)}")
         return {}
-    return data.get("data", {}).get("minute", {})
 
 def download_minute_transcript(access_token: str, minute_token: str) -> str:
     """
