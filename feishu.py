@@ -50,10 +50,12 @@ def exchange_code_for_token(code: str) -> dict:
     response.raise_for_status()
     data = response.json()
     
-    if data.get("code") != 0:
+    if data.get("code") is not None and data.get("code") != 0:
         raise Exception(f"Feishu OAuth error: {data.get('msg')}")
         
-    return data.get("data", {})
+    if "data" in data and isinstance(data["data"], dict) and "access_token" in data["data"]:
+        return data["data"]
+    return data
 
 def refresh_feishu_token(refresh_token: str) -> dict:
     """
@@ -74,10 +76,12 @@ def refresh_feishu_token(refresh_token: str) -> dict:
     response.raise_for_status()
     data = response.json()
     
-    if data.get("code") != 0:
+    if data.get("code") is not None and data.get("code") != 0:
         raise Exception(f"Feishu token refresh error: {data.get('msg')}")
         
-    return data.get("data", {})
+    if "data" in data and isinstance(data["data"], dict) and "access_token" in data["data"]:
+        return data["data"]
+    return data
 
 def get_user_info(access_token: str) -> dict:
     """
