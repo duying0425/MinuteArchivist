@@ -231,7 +231,14 @@ def get_me(current_user: User = Depends(get_current_user)):
         "feishu_info": feishu_info
     }
 
-# --- Feishu OAuth Binding APIs ---
+# --- Feishu OAuth Binding & Login APIs ---
+
+@app.get("/api/auth/feishu/login_url")
+def get_feishu_login_url():
+    """
+    Generate Feishu OAuth Authorize URL for direct login/register.
+    """
+    return {"url": get_feishu_auth_url(state="login")}
 
 @app.get("/api/auth/feishu/url")
 def get_feishu_url(current_user: User = Depends(get_current_user)):
@@ -241,65 +248,15 @@ def get_feishu_url(current_user: User = Depends(get_current_user)):
 @app.get("/api/auth/feishu/callback")
 def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
     """
-    Feishu callback handler. Exchanged code for access/refresh token and closes window.
+    Feishu callback handler. Handles both direct login (state="login") and profile binding (state=user_id).
+    Exchanges code for access/refresh token and closes window.
     """
-    user_id = int(state)
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        return HTMLResponse("<h3>授权失败：未找到本地关联用户。</h3>")
-        
+    import secrets
+    
+    # 1. Exchange code for token
     try:
-        # Exchange code for token
         token_data = exchange_code_for_token(code)
-        
-        # Get user info
         user_info = get_user_info(token_data["access_token"])
-        
-        # Check if user already has a token in DB, update or create
-        now = datetime.datetime.utcnow()
-        expires_at = now + datetime.timedelta(seconds=token_data["expires_in"])
-        refresh_expires_at = now + datetime.timedelta(seconds=token_data["refresh_expires_in"])
-        
-        db_token = db.query(FeishuToken).filter(FeishuToken.user_id == user_id).first()
-        if db_token:
-            db_token.open_id = token_data.get("open_id", user_info.get("open_id"))
-            db_token.name = user_info.get("name")
-            db_token.avatar_url = user_info.get("avatar_url")
-            db_token.access_token = token_data["access_token"]
-            db_token.refresh_token = token_data["refresh_token"]
-            db_token.expires_at = expires_at
-            db_token.refresh_expires_at = refresh_expires_at
-            db_token.updated_at = now
-        else:
-            db_token = FeishuToken(
-                user_id=user_id,
-                open_id=token_data.get("open_id", user_info.get("open_id")),
-                name=user_info.get("name"),
-                avatar_url=user_info.get("avatar_url"),
-                access_token=token_data["access_token"],
-                refresh_token=token_data["refresh_token"],
-                expires_at=expires_at,
-                refresh_expires_at=refresh_expires_at
-            )
-            db.add(db_token)
-            
-        db.commit()
-        
-        # Return elegant HTML that notifies frontend SPA and closes popup
-        return HTMLResponse("""
-            <html>
-            <head><title>授权成功</title></head>
-            <body>
-                <h3 style="text-align: center; font-family: sans-serif; margin-top: 50px; color: #10b981;">
-                    飞书绑定成功！正在返回应用...
-                </h3>
-                <script>
-                    window.opener.postMessage({ type: 'FEISHU_AUTH_SUCCESS' }, '*');
-                    window.close();
-                </script>
-            </body>
-            </html>
-        """)
     except Exception as e:
         return HTMLResponse(f"""
             <html>
@@ -311,6 +268,152 @@ def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
             </body>
             </html>
         """)
+
+    open_id = token_data.get("open_id") or user_info.get("open_id")
+    if not open_id:
+        return HTMLResponse("<h3>授权失败：未获取到飞书用户的 OpenID。</h3>")
+
+    now = datetime.datetime.utcnow()
+    expires_at = now + datetime.timedelta(seconds=token_data["expires_in"])
+    refresh_expires_at = now + datetime.timedelta(seconds=token_data["refresh_expires_in"])
+
+    # Case A: Direct Login & Register Flow
+    if state == "login":
+        try:
+            # Check if this open_id is already bound
+            db_token = db.query(FeishuToken).filter(FeishuToken.open_id == open_id).first()
+            if db_token:
+                user = db_token.user
+                # Update tokens
+                db_token.name = user_info.get("name", db_token.name)
+                db_token.avatar_url = user_info.get("avatar_url", db_token.avatar_url)
+                db_token.access_token = token_data["access_token"]
+                db_token.refresh_token = token_data["refresh_token"]
+                db_token.expires_at = expires_at
+                db_token.refresh_expires_at = refresh_expires_at
+                db_token.updated_at = now
+                db.commit()
+            else:
+                # Create a new user automatically
+                feishu_name = user_info.get("name") or f"feishu_{open_id[:8]}"
+                username = feishu_name
+                counter = 1
+                while db.query(User).filter(User.username == username).first():
+                    username = f"{feishu_name}_{counter}"
+                    counter += 1
+                
+                random_password = secrets.token_hex(16)
+                hashed_pwd = get_password_hash(random_password)
+                user = User(username=username, hashed_password=hashed_pwd)
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+                
+                # Bind the Feishu token to this new user
+                db_token = FeishuToken(
+                    user_id=user.id,
+                    open_id=open_id,
+                    name=user_info.get("name"),
+                    avatar_url=user_info.get("avatar_url"),
+                    access_token=token_data["access_token"],
+                    refresh_token=token_data["refresh_token"],
+                    expires_at=expires_at,
+                    refresh_expires_at=refresh_expires_at
+                )
+                db.add(db_token)
+                db.commit()
+
+            # Generate local access token
+            local_access_token = create_access_token(data={"sub": user.username})
+
+            return HTMLResponse(f"""
+                <html>
+                <head><title>登录成功</title></head>
+                <body>
+                    <h3 style="text-align: center; font-family: sans-serif; margin-top: 50px; color: #10b981;">
+                        飞书登录成功！正在进入系统...
+                    </h3>
+                    <script>
+                        window.opener.postMessage({{ type: 'FEISHU_LOGIN_SUCCESS', token: '{local_access_token}' }}, '*');
+                        window.close();
+                    </script>
+                </body>
+                </html>
+            """)
+        except Exception as e:
+            return HTMLResponse(f"""
+                <html>
+                <head><title>登录失败</title></head>
+                <body>
+                    <h3 style="text-align: center; font-family: sans-serif; margin-top: 50px; color: #ef4444;">
+                        登录注册流程异常: {str(e)}
+                    </h3>
+                </body>
+                </html>
+            """)
+
+    # Case B: Standard Profile Binding Flow
+    else:
+        try:
+            user_id = int(state)
+        except ValueError:
+            return HTMLResponse("<h3>授权失败：无效的授权状态 (state)。</h3>")
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return HTMLResponse("<h3>授权失败：未找到本地关联用户。</h3>")
+
+        try:
+            db_token = db.query(FeishuToken).filter(FeishuToken.user_id == user_id).first()
+            if db_token:
+                db_token.open_id = open_id
+                db_token.name = user_info.get("name")
+                db_token.avatar_url = user_info.get("avatar_url")
+                db_token.access_token = token_data["access_token"]
+                db_token.refresh_token = token_data["refresh_token"]
+                db_token.expires_at = expires_at
+                db_token.refresh_expires_at = refresh_expires_at
+                db_token.updated_at = now
+            else:
+                db_token = FeishuToken(
+                    user_id=user_id,
+                    open_id=open_id,
+                    name=user_info.get("name"),
+                    avatar_url=user_info.get("avatar_url"),
+                    access_token=token_data["access_token"],
+                    refresh_token=token_data["refresh_token"],
+                    expires_at=expires_at,
+                    refresh_expires_at=refresh_expires_at
+                )
+                db.add(db_token)
+                
+            db.commit()
+            
+            return HTMLResponse("""
+                <html>
+                <head><title>授权成功</title></head>
+                <body>
+                    <h3 style="text-align: center; font-family: sans-serif; margin-top: 50px; color: #10b981;">
+                        飞书绑定成功！正在返回应用...
+                    </h3>
+                    <script>
+                        window.opener.postMessage({ type: 'FEISHU_AUTH_SUCCESS' }, '*');
+                        window.close();
+                    </script>
+                </body>
+                </html>
+            """)
+        except Exception as e:
+            return HTMLResponse(f"""
+                <html>
+                <head><title>授权失败</title></head>
+                <body>
+                    <h3 style="text-align: center; font-family: sans-serif; margin-top: 50px; color: #ef4444;">
+                        绑定授权异常: {str(e)}
+                    </h3>
+                </body>
+                </html>
+            """)
 
 @app.post("/api/auth/feishu/unbind")
 def feishu_unbind(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

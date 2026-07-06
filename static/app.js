@@ -270,11 +270,38 @@ async function unbindFeishu() {
     }
 }
 
-// Listen to Feishu auth success message from OAuth popup
+// Trigger direct login via Feishu
+function handleFeishuLogin() {
+    const width = 600;
+    const height = 600;
+    const left = (screen.width - width) / 2;
+    const top = (screen.height - height) / 2;
+    
+    fetch('/api/auth/feishu/login_url')
+        .then(res => res.json())
+        .then(data => {
+            window.open(
+                data.url, 
+                'feishu_login_popup', 
+                `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
+            );
+        })
+        .catch(err => showToast('无法获取飞书授权登录地址', 'error'));
+}
+
+// Listen to Feishu auth success/login messages from OAuth popup
 window.addEventListener('message', async (event) => {
-    if (event.data && event.data.type === 'FEISHU_AUTH_SUCCESS') {
+    if (!event.data) return;
+    
+    if (event.data.type === 'FEISHU_AUTH_SUCCESS') {
         showToast('飞书绑定成功！', 'success');
         await loadUserProfile();
+    } else if (event.data.type === 'FEISHU_LOGIN_SUCCESS') {
+        const token = event.data.token;
+        state.token = token;
+        localStorage.setItem('token', token);
+        showToast('飞书登录成功！欢迎回来', 'success');
+        await initDashboard();
     }
 });
 

@@ -975,3 +975,43 @@ h3 {
 .toast.error i {
     color: var(--error);
 }
+
+/* ==========================================================================
+   DIRECT FEISHU LOGIN BUTTON & SEPARATOR
+   ========================================================================== */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 20px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.auth-divider:not(:empty)::before {
+    margin-right: .5em;
+}
+
+.auth-divider:not(:empty)::after {
+    margin-left: .5em;
+}
+
+.btn-feishu {
+    background: #3370ff;
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(51, 112, 255, 0.3);
+}
+
+.btn-feishu:hover {
+    background: #2b5fd9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(51, 112, 255, 0.4);
+    color: #ffffff;
+}
