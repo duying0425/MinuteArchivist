@@ -626,12 +626,20 @@ function triggerDownload(taskId) {
     apiFetch(url)
         .then(res => {
             if (!res.ok) throw new Error('Download failed');
-            // Extract filename from headers if possible, otherwise use fallback
+            // Extract filename from Content-Disposition header.
+            // 支持两种格式:
+            //   1. filename="xxx.md"            (纯 ASCII)
+            //   2. filename*=UTF-8''%E5%A6%99... (RFC 5987,中文会被 URL 编码)
             const contentDisposition = res.headers.get('Content-Disposition');
             let filename = '妙记归档员会议记录.md';
             if (contentDisposition) {
-                const match = contentDisposition.match(/filename="(.+?)"/);
-                if (match) filename = decodeURIComponent(match[1]);
+                const starMatch = contentDisposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/i);
+                if (starMatch) {
+                    filename = decodeURIComponent(starMatch[1]);
+                } else {
+                    const match = contentDisposition.match(/filename="?([^";]+)"?/);
+                    if (match) filename = match[1];
+                }
             }
             return res.blob().then(blob => ({ blob, filename }));
         })
