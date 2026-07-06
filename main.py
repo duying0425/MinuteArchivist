@@ -731,8 +731,22 @@ def process_webhook_minute_event(user_id: int, minute_token: str):
             Task.minute_token == minute_token
         ).first()
         if existing:
-            print(f"Task already exists for minute_token {minute_token}")
-            return
+            if existing.status == "completed":
+                print(f"Task already completed for minute_token {minute_token}")
+                return
+            elif existing.status in ["pending", "processing"]:
+                print(f"Task is already in {existing.status} status for minute_token {minute_token}")
+                return
+            else:
+                # If the task exists but failed (e.g., because minutes were not ready when recording_ready fired),
+                # reset its status to pending and re-process it now that the minutes are generated.
+                print(f"Task exists in status '{existing.status}'. Resetting and processing for minute_token {minute_token}")
+                existing.status = "pending"
+                existing.progress = 0
+                existing.error_message = None
+                db.commit()
+                process_feishu_task(existing.id)
+                return
             
         # Create new Feishu task
         task_id = str(uuid.uuid4())
