@@ -149,14 +149,25 @@ systemctl --user restart voicenote.service
      - **「妙记生成事件」** (`minutes.minute.generated_v1`)：**【强烈推荐】** 不论是通过会议自动录制，还是**手动在飞书妙记中上传音视频文件**生成的妙记，均会触发该事件，本系统已原生适配此直接推送通道！
      - **「录制就绪事件」** (`vc.meeting.recording_ready_v1`)：【可选】用于保障常规视频会议录制归档。
 3. **权限管理 (Permissions/Scopes)**：
-   - 进入 **“开发配置” -> “权限管理”**，搜索并开通以下核心接口权限：
-     - **飞书妙记**：`minutes:minute` / `minutes:minute:readonly` （获取、修改妙记信息及下载/导出逐字稿）
+   - 进入 **"开发配置" -> "权限管理"**，**搜索关键词用 "妙记" 或 "minutes"（不要用 "meeting"）**，搜索并开通以下核心接口权限：
+     - **飞书妙记（必选）**：
+       - `minutes:minutes.basic:read`（获取妙记基本信息，用于通过 minute_token 查询妙记元数据）
+       - `minutes:minutes.transcript:export`（导出妙记转写的文字内容，用于下载逐字稿，**这是核心权限，缺失会报错 99991679 / 20027**）
      - **即时消息 (机器人卡片)**：`im:message` （给用户发送单聊卡片消息）、`im:message:send_as_bot` （以应用身份发送消息）
      - **视频会议 (会议录制)**：`vc:meeting` （获取会议录制信息，配合会议事件使用）
+   - ⚠️ **权限名易错点提醒**：飞书的妙记权限域是 `minutes:minutes.*`（**双 s**），不是 `minutes:minute.*`（单数）。错误码 99991679 / 20027 报错信息里写的 `minutes:minute:download` 实际并不存在，飞书后台可开通的是 `minutes:minutes.transcript:export`。
 4. **机器人开启 (Bot)**：
-   - 进入 **“应用功能” -> “机器人”**，点击开启机器人功能（卡片消息由该机器人推送）。
-5. **应用版本发布**：
-   - 权限申请与事件订阅配置好后，进入 **“版本管理与发布”** 创建版本，申请发布（自建应用可由管理员直接秒批，测试阶段也可以先将您的账号加入测试账号列表进行联调测试）。
+   - 进入 **"应用功能" -> "机器人"**，点击开启机器人功能（卡片消息由该机器人推送）。
+5. **应用版本发布（关键步骤，不开通权限不生效）**：
+   - 权限申请与事件订阅配置好后，进入 **"版本管理与发布"** 创建版本，申请发布（自建应用可由管理员直接秒批，测试阶段也可以先将您的账号加入测试账号列表进行联调测试）。
+   - ⚠️ **权限开通后必须发布新版本才会生效**，仅在权限管理页勾选是不够的。
+6. **用户重新授权（关键步骤，旧 token 不带新权限）**：
+   - 应用版本发布后，**已经绑定飞书的旧用户 access_token 仍然没有新权限**，必须让用户重新走 OAuth 流程换取新 token：
+     1. 登录妙记归档员主页，进入账号绑定页面
+     2. 解绑飞书账号
+     3. 重新点击「绑定飞书账号」
+     4. 授权页这次会显示要获取「导出妙记转写文字内容」权限，用户点同意后才能拿到带新 scope 的 token
+   - 完成后才能正常贴入飞书妙记链接下载逐字稿，否则会持续报错 99991679 / 20027。
 
 ---
 
@@ -180,3 +191,89 @@ systemctl --user restart voicenote.service
   ```bash
   systemctl --user stop voicenote.service
   ```
+
+---
+
+## 🔧 故障排查 (Troubleshooting)
+
+### 1. 飞书妙记导出失败：错误码 99991679 / 20027
+
+**报错信息示例**：
+```
+飞书妙记导出失败: Unauthorized. You do not have permission to perform the requested operation on the resource.
+Please request user re-authorization and try again.
+required one of these privileges under the user identity: [minutes:minute:download, minutes:minutes.transcript:export]
+应用未获取所需的用户授权：[minutes:minute:download, minutes:minutes.transcript:export] (错误码: 99991679)
+```
+
+**根因**：飞书 OAuth 授权的 access_token 没有妙记导出权限。
+
+**解决步骤**（必须按顺序完成）：
+1. **飞书开发者后台开通权限**：进入应用 → 开发配置 → 权限管理，搜索 "妙记" 或 "minutes"，开通 `minutes:minutes.basic:read` 和 `minutes:minutes.transcript:export`。
+   - ⚠️ 报错信息里的 `minutes:minute:download` 这个权限名**实际上不存在**，是飞书错误信息里的误导，飞书后台可开通的正确权限名是 `minutes:minutes.transcript:export`（注意是双 `s`）。
+2. **发布新版本**：进入「版本管理与发布」创建版本并发布，权限才会生效。
+3. **用户重新授权**：旧 token 没有新权限，必须解绑飞书账号后重新绑定，走一遍 OAuth 流程换取带新 scope 的 token。
+
+### 2. 网页下载文件名错误（显示"妙记归档员会议记录.md"）
+
+**根因**：通常是浏览器或 CDN（如 Cloudflare）缓存了旧版静态资源 `app.js`。
+
+**自动解决方案（已实现）**：项目已集成 **Cache Busting 自动化机制** - 服务启动时读取 git commit hash，自动注入到 `index.html` 的静态资源 URL（如 `app.js?v=9ae1a33`）。每次部署新代码 commit hash 变化 → URL 变化 → CDN 视为新文件不命中旧缓存。
+
+**手动排查步骤**（如果仍不生效）：
+1. F12 → Network → 点击 download 请求，查看 Response Headers
+2. 检查 `Cf-Cache-Status` 字段：如果是 `HIT` 且 `Age` 较大，说明 Cloudflare 命中了旧缓存
+3. 登录 Cloudflare 后台 → Caching → Configuration → Purge Cache → Purge Everything
+4. 强制刷新浏览器（Ctrl+Shift+R）
+
+### 3. Markdown 预览加载失败 / 下载接口报 500
+
+**根因**：`main.py` 中使用了 `re.sub()` 生成安全文件名，但缺少 `import re`。
+
+**解决方案**：确保 `main.py` 顶部有 `import re`（已修复）。
+
+### 4. 说话人映射 UI 显示"未找到明显的说话人标记"
+
+**根因**：飞书妙记返回的转写格式与 parser 的正则不匹配。
+
+**飞书妙记实际格式**（parser 已支持）：
+```
+说话人 1 00:00:01.700
+说话人 1 的发言内容...
+
+说话人 2 00:00:15.200
+说话人 2 的发言内容...
+```
+
+**注意**：飞书的格式是「说话人在前 + 时间戳带毫秒 + 内容在下一行」，与传统的 `[00:00:01] 说话人: 内容` 格式不同。`parser.py` 已同时支持两种格式。
+
+### 5. 部署后浏览器未生效新代码
+
+**根因**：CDN 或浏览器缓存了旧版 JS/CSS。
+
+**自动机制**：项目使用 git commit hash 作为静态资源版本号（cache busting），URL 形如 `app.js?v=<git-hash>`，每次部署自动变化。
+
+**手动操作**：通常普通刷新（Ctrl+R）即可，因为 `index.html` 配置了 `Cache-Control: no-store`。如果 CDN 仍命中旧缓存，需要在 Cloudflare 后台手动清缓存。
+
+---
+
+## 📝 部署后维护注意事项
+
+### 静态资源缓存策略
+
+项目使用 **Cache Busting 自动化机制** 管理静态资源缓存：
+
+- **机制**：服务启动时读取 git commit hash，注入到 `index.html` 的静态资源 URL（如 `app.js?v=9ae1a33`）
+- **目的**：每次部署新代码，URL 自动变化，CDN 和浏览器视为新文件，不命中旧缓存
+- **配置位置**：
+  - [main.py](main.py) 中的 `_get_app_version()` 和 `_render_index_html()` 函数
+  - [static/index.html](static/index.html) 中的 `?v=__APP_VERSION__` 占位符
+- **维护**：无需手动改版本号，每次 `git pull` + 重启服务即自动生效
+
+### 修改飞书权限后的必要操作
+
+如果在飞书开发者后台修改了应用权限（新增/删除 scope），必须：
+1. 发布新版本（版本管理与发布 → 创建版本 → 申请发布）
+2. 通知所有已绑定用户重新授权（解绑后重新绑定飞书账号）
+
+否则旧 access_token 仍带旧 scope，新权限不会生效。
