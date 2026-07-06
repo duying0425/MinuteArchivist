@@ -42,7 +42,8 @@ def exchange_code_for_token(code: str) -> dict:
         "grant_type": "authorization_code",
         "code": code,
         "client_id": settings.FEISHU_APP_ID,
-        "client_secret": settings.FEISHU_APP_SECRET
+        "client_secret": settings.FEISHU_APP_SECRET,
+        "redirect_uri": settings.FEISHU_REDIRECT_URI
     }
     
     response = requests.post(url, json=payload, headers=headers)
