@@ -23,16 +23,16 @@ def get_feishu_auth_url(state: str) -> str:
     """
     Generate Feishu OAuth Authorize URL.
     scope 必须包含妙记逐字稿导出所需的用户授权权限。
-    错误码 99991679 明确要求以下两个权限之一（这里两个都带上，二选一即可）：
-    - minutes:minute:download
-    - minutes:minutes.transcript:export
+    注意权限名是 minutes:minutes.*（minutes 后面有 s），不是 minutes:minute:*。
+    只申请后台已开通的用户权限，避免授权页报 Access Denied：
+    - minutes:minutes.transcript:export（导出妙记转写文字记录，下载逐字稿必需）
+    - minutes:minutes.basic:read（获取妙记基本信息，用于 get_minute_metadata）
     offline_access 用于保持 refresh_token 刷新能力。
-    注意：不要随意添加未经开发者后台开通的 scope，否则会导致整个 OAuth 授权页报 Access Denied。
     """
     scopes = [
         "offline_access",
-        "minutes:minute:download",
         "minutes:minutes.transcript:export",
+        "minutes:minutes.basic:read",
     ]
     scope_param = " ".join(scopes)
     return (
