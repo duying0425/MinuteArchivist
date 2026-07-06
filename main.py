@@ -3,6 +3,7 @@ import re
 import uuid
 import json
 import datetime
+import subprocess
 from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
@@ -45,9 +46,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # 必须显式暴露 Content-Disposition，否则前端 fetch 无法读取下载文件名，
-    # 会 fallback 到默认名 "妙记归档员会议记录.md"
-    expose_headers=["Content-Disposition"],
 )
 
 # Background processing for Feishu tasks
@@ -873,12 +871,55 @@ def public_download_task_markdown(task_id: str, db: Session = Depends(get_db)):
 # Ensure directories exist
 os.makedirs("static", exist_ok=True)
 
-# Mount the static folder for CSS, HTML, JS
-# 使用自定义子类给静态文件加 no-store，避免 Cloudflare 和浏览器缓存旧版 JS/CSS
+# Cache busting: 用 git commit hash 作为静态资源版本号
+# 每次部署新代码 commit hash 变化 → index.html 里 ?v=xxx 变化 →
+# 浏览器和 Cloudflare 视为新 URL，不会命中旧缓存。
+# 这是前端工程化的标准实践（类似 Webpack/Vite 的 [contenthash] 机制）。
+def _get_app_version() -> str:
+    """获取 git commit short hash 作为应用版本号，失败时回退到 app.js 的 mtime。"""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        try:
+            return str(int(os.path.getmtime("static/app.js")))
+        except OSError:
+            return "0"
+
+APP_VERSION = _get_app_version()
+
+# 预读 index.html 并把 __APP_VERSION__ 占位符替换为实际版本号
+# 这样 app.js?v=__APP_VERSION__ 和 style.css?v=__APP_VERSION__ 会被自动填充
+def _render_index_html() -> str:
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        return f.read().replace("__APP_VERSION__", APP_VERSION)
+
+INDEX_HTML = _render_index_html()
+
+NO_STORE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+@app.get("/", include_in_schema=False)
+async def serve_index_root():
+    """根路径返回注入版本号的 index.html（禁用缓存）。"""
+    return HTMLResponse(content=INDEX_HTML, headers=NO_STORE_HEADERS)
+
+@app.get("/index.html", include_in_schema=False)
+async def serve_index_html():
+    """兼容直接访问 /index.html 的情况。"""
+    return HTMLResponse(content=INDEX_HTML, headers=NO_STORE_HEADERS)
+
+# Mount 静态目录处理 JS/CSS/图片等其他资源
+# 自定义子类给 200 响应加 no-store，避免 Cloudflare/浏览器缓存旧版
 class NoCacheStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        # 只有成功响应(200)才覆盖缓存策略，304/404 等不动
         if response.status_code == 200:
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
