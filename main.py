@@ -874,13 +874,15 @@ def public_download_task_markdown(task_id: str, db: Session = Depends(get_db)):
 os.makedirs("static", exist_ok=True)
 
 # Mount the static folder for CSS, HTML, JS
-# 使用自定义子类给静态文件加 no-cache，避免更新代码后浏览器仍使用旧版 JS/CSS
+# 使用自定义子类给静态文件加 no-store，避免 Cloudflare 和浏览器缓存旧版 JS/CSS
 class NoCacheStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        # 只有成功响应(200)才加 no-cache，304/404 等不动
+        # 只有成功响应(200)才覆盖缓存策略，304/404 等不动
         if response.status_code == 200:
-            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         return response
 
 app.mount("/", NoCacheStaticFiles(directory="static", html=True), name="static")
