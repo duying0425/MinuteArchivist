@@ -702,24 +702,34 @@ function closeWorkspace() {
 }
 
 // Extract unique speakers list from raw transcript content
+// 支持两种格式：
+//   1. 飞书妙记：'说话人 1 00:00:01.700\n内容...'
+//   2. 旧格式：'[00:00:01] 说话人 1: 内容...'
 function extractUniqueSpeakers(transcriptText) {
     if (!transcriptText) return [];
-    
-    // Regex matches [HH:MM:SS] SpeakerName: or [MM:SS] SpeakerName:
-    // Support both full colon and half colon
-    const regex = /^\[(?:\d{1,2}:)?\d{2}:\d{2}\]\s*(.*?)[：:]/gm;
+
     const speakers = new Set();
+
+    // 飞书妙记格式：'说话人名 HH:MM:SS[.mmm]' 单独成行
+    const feishuRegex = /^(.+?)\s+(\d{1,2}:\d{2}:\d{2}(?:\.\d+)?)\s*$/gm;
     let match;
-    
-    // Reset index just in case
-    regex.lastIndex = 0;
-    while ((match = regex.exec(transcriptText)) !== null) {
+    while ((match = feishuRegex.exec(transcriptText)) !== null) {
+        const speakerName = match[1].trim();
+        // 过滤掉过长的误匹配（普通正文不会以时间戳结尾单独成行）
+        if (speakerName && speakerName.length <= 50) {
+            speakers.add(speakerName);
+        }
+    }
+
+    // 旧格式：'[HH:MM:SS] 说话人:' 或 '[MM:SS] 说话人:'
+    const legacyRegex = /^\[(?:\d{1,2}:)?\d{2}:\d{2}\]\s*(.*?)[：:]/gm;
+    while ((match = legacyRegex.exec(transcriptText)) !== null) {
         const speakerName = match[1].trim();
         if (speakerName) {
             speakers.add(speakerName);
         }
     }
-    
+
     return Array.from(speakers);
 }
 

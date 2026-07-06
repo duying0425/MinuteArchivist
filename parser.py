@@ -3,8 +3,15 @@ import datetime
 from typing import List, Dict, Tuple
 from jinja2 import Template
 
-# Regular expression to parse transcript lines: [HH:MM:SS] Speaker: Content or [MM:SS] Speaker: Content
-TRANSCRIPT_LINE_REGEX = re.compile(
+# 兼容两种转写格式：
+# 1. 飞书妙记格式（speaker 后跟时间戳，内容在下一行）：
+#    "说话人 1 00:00:01.700\n诶，邓老师。..."
+# 2. 本地 ASR / 旧格式（方括号时间戳 + 冒号分隔）：
+#    "[00:00:01] 说话人 1: 诶，邓老师。"
+FEISHU_TRANSCRIPT_LINE_REGEX = re.compile(
+    r"^(.+?)\s+(\d{1,2}:\d{2}:\d{2}(?:\.\d+)?)\s*$"
+)
+LEGACY_TRANSCRIPT_LINE_REGEX = re.compile(
     r"^\[(\d{1,2}:\d{2}:\d{2}|\d{1,2}:\d{2})\]\s*(.*?)[：:]\s*(.*)$"
 )
 
@@ -50,48 +57,71 @@ MARKDOWN_TEMPLATE = """# {{ title }}
 def parse_transcript_text(raw_text: str) -> List[Dict[str, str]]:
     """
     Parse a raw transcript text into structured paragraphs.
-    Handles line combinations if some lines don't have timestamps (appends to previous speaker).
+    支持两种格式：
+    - 飞书妙记：'说话人 1 00:00:01.700\\n内容...'
+    - 旧格式：'[00:00:01] 说话人 1: 内容...'
+    连续非匹配行追加到当前说话人的 content。
     """
     lines = raw_text.splitlines()
     parsed_items = []
-    
+
     current_item = None
-    
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
-            
-        match = TRANSCRIPT_LINE_REGEX.match(line)
-        if match:
-            # If we had a previous item, save it
+
+        # 优先尝试飞书妙记格式：'说话人名 HH:MM:SS[.mmm]'
+        feishu_match = FEISHU_TRANSCRIPT_LINE_REGEX.match(line)
+        if feishu_match:
+            # 确认这不是普通文本误匹配（要求 speaker 部分不能为空，且整体不能太长）
+            speaker_candidate = feishu_match.group(1).strip()
+            if speaker_candidate and len(speaker_candidate) <= 50:
+                if current_item:
+                    parsed_items.append(current_item)
+                current_item = {
+                    "timestamp": feishu_match.group(2),
+                    "speaker": speaker_candidate,
+                    "content": ""
+                }
+                continue
+
+        # 尝试旧格式：'[HH:MM:SS] 说话人: 内容'
+        legacy_match = LEGACY_TRANSCRIPT_LINE_REGEX.match(line)
+        if legacy_match:
             if current_item:
                 parsed_items.append(current_item)
-                
-            timestamp = match.group(1)
-            speaker = match.group(2).strip()
-            content = match.group(3).strip()
-            
             current_item = {
-                "timestamp": timestamp,
-                "speaker": speaker,
-                "content": content
+                "timestamp": legacy_match.group(1),
+                "speaker": legacy_match.group(2).strip(),
+                "content": legacy_match.group(3).strip()
             }
-        else:
-            # If line doesn't match the regex, it's either header text or continuous speaker content
-            if current_item:
+            continue
+
+        # 非匹配行：追加到当前说话人的内容
+        if current_item:
+            if current_item["content"]:
                 current_item["content"] += "\n" + line
             else:
-                # Discard or keep as initial speaker-less segment
-                current_item = {
-                    "timestamp": "00:00:00",
-                    "speaker": "未知说话人",
-                    "content": line
-                }
-                
+                current_item["content"] = line
+        else:
+            # 还没遇到任何说话人：作为头部文本丢弃，避免污染第一段发言
+            continue
+
     if current_item:
-        parsed_items.append(current_item)
-        
+        # 过滤掉空内容的 item（飞书格式末尾可能有多余的说话人标记）
+        if current_item["content"]:
+            parsed_items.append(current_item)
+
+    # 如果整个文本完全没匹配到任何说话人，兜底返回原文作为未知说话人
+    if not parsed_items:
+        parsed_items.append({
+            "timestamp": "00:00:00",
+            "speaker": "未知说话人",
+            "content": raw_text.strip()
+        })
+
     return parsed_items
 
 def generate_markdown(
