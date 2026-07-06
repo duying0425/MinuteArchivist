@@ -274,8 +274,20 @@ def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
         return HTMLResponse("<h3>授权失败：未获取到飞书用户的 OpenID。</h3>")
 
     now = datetime.datetime.utcnow()
-    expires_at = now + datetime.timedelta(seconds=token_data["expires_in"])
-    refresh_expires_at = now + datetime.timedelta(seconds=token_data["refresh_expires_in"])
+    
+    expires_in = token_data.get("expires_in")
+    if expires_in is not None:
+        expires_at = now + datetime.timedelta(seconds=int(expires_in))
+    else:
+        expires_at = now + datetime.timedelta(seconds=7200)
+
+    refresh_token = token_data.get("refresh_token") or ""
+    refresh_expires_in = token_data.get("refresh_expires_in")
+    if refresh_expires_in is not None:
+        refresh_expires_at = now + datetime.timedelta(seconds=int(refresh_expires_in))
+    else:
+        # Default to 30 days if refresh token is present, otherwise use now (no refresh available)
+        refresh_expires_at = now + datetime.timedelta(days=30) if refresh_token else now
 
     # Case A: Direct Login & Register Flow
     if state == "login":
@@ -288,7 +300,7 @@ def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
                 db_token.name = user_info.get("name", db_token.name)
                 db_token.avatar_url = user_info.get("avatar_url", db_token.avatar_url)
                 db_token.access_token = token_data["access_token"]
-                db_token.refresh_token = token_data["refresh_token"]
+                db_token.refresh_token = refresh_token
                 db_token.expires_at = expires_at
                 db_token.refresh_expires_at = refresh_expires_at
                 db_token.updated_at = now
@@ -316,7 +328,7 @@ def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
                     name=user_info.get("name"),
                     avatar_url=user_info.get("avatar_url"),
                     access_token=token_data["access_token"],
-                    refresh_token=token_data["refresh_token"],
+                    refresh_token=refresh_token,
                     expires_at=expires_at,
                     refresh_expires_at=refresh_expires_at
                 )
@@ -370,7 +382,7 @@ def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
                 db_token.name = user_info.get("name")
                 db_token.avatar_url = user_info.get("avatar_url")
                 db_token.access_token = token_data["access_token"]
-                db_token.refresh_token = token_data["refresh_token"]
+                db_token.refresh_token = refresh_token
                 db_token.expires_at = expires_at
                 db_token.refresh_expires_at = refresh_expires_at
                 db_token.updated_at = now
@@ -381,7 +393,7 @@ def feishu_callback(code: str, state: str, db: Session = Depends(get_db)):
                     name=user_info.get("name"),
                     avatar_url=user_info.get("avatar_url"),
                     access_token=token_data["access_token"],
-                    refresh_token=token_data["refresh_token"],
+                    refresh_token=refresh_token,
                     expires_at=expires_at,
                     refresh_expires_at=refresh_expires_at
                 )

@@ -28,6 +28,7 @@ def get_feishu_auth_url(state: str) -> str:
         f"?app_id={settings.FEISHU_APP_ID}"
         f"&redirect_uri={settings.FEISHU_REDIRECT_URI}"
         f"&state={state}"
+        f"&scope=offline_access"
     )
 
 def exchange_code_for_token(code: str) -> dict:
