@@ -22,13 +22,25 @@ def extract_minute_token(url_or_token: str) -> str:
 def get_feishu_auth_url(state: str) -> str:
     """
     Generate Feishu OAuth Authorize URL.
+    scope 必须包含妙记逐字稿导出所需的用户授权权限。
+    错误码 99991679 明确要求以下两个权限之一（这里两个都带上，二选一即可）：
+    - minutes:minute:download
+    - minutes:minutes.transcript:export
+    offline_access 用于保持 refresh_token 刷新能力。
+    注意：不要随意添加未经开发者后台开通的 scope，否则会导致整个 OAuth 授权页报 Access Denied。
     """
+    scopes = [
+        "offline_access",
+        "minutes:minute:download",
+        "minutes:minutes.transcript:export",
+    ]
+    scope_param = " ".join(scopes)
     return (
         f"https://open.feishu.cn/open-apis/authen/v1/index"
         f"?app_id={settings.FEISHU_APP_ID}"
         f"&redirect_uri={settings.FEISHU_REDIRECT_URI}"
         f"&state={state}"
-        f"&scope=offline_access"
+        f"&scope={scope_param}"
     )
 
 def exchange_code_for_token(code: str) -> dict:
