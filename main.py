@@ -45,6 +45,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # 必须显式暴露 Content-Disposition，否则前端 fetch 无法读取下载文件名，
+    # 会 fallback 到默认名 "妙记归档员会议记录.md"
+    expose_headers=["Content-Disposition"],
 )
 
 # Background processing for Feishu tasks
