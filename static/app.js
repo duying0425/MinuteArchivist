@@ -616,43 +616,15 @@ async function deleteTask(taskId) {
 
 // Download MD directly trigger
 function triggerDownload(taskId) {
-    const token = state.token;
-    const url = `/api/tasks/${taskId}/download`;
-    // Create temporary link for downloading
+    // 走 public 下载接口（无需 Authorization header），用 <a> 标签触发下载。
+    // 浏览器原生处理 Content-Disposition，文件名正确，且不受 CORS expose_headers 限制。
+    // public 接口对已完成的任务都开放，登录用户只是多了身份校验，public 也能用。
     const link = document.createElement('a');
-    link.href = url;
-    
-    // Fetch file with authorization header using object url
-    apiFetch(url)
-        .then(res => {
-            if (!res.ok) throw new Error('Download failed');
-            // Extract filename from Content-Disposition header.
-            // 支持两种格式:
-            //   1. filename="xxx.md"            (纯 ASCII)
-            //   2. filename*=UTF-8''%E5%A6%99... (RFC 5987,中文会被 URL 编码)
-            const contentDisposition = res.headers.get('Content-Disposition');
-            let filename = '妙记归档员会议记录.md';
-            if (contentDisposition) {
-                const starMatch = contentDisposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/i);
-                if (starMatch) {
-                    filename = decodeURIComponent(starMatch[1]);
-                } else {
-                    const match = contentDisposition.match(/filename="?([^";]+)"?/);
-                    if (match) filename = match[1];
-                }
-            }
-            return res.blob().then(blob => ({ blob, filename }));
-        })
-        .then(({ blob, filename }) => {
-            const objUrl = URL.createObjectURL(blob);
-            link.href = objUrl;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(objUrl);
-        })
-        .catch(err => showToast('下载文件出错', 'error'));
+    link.href = `/api/tasks/public/${taskId}/download`;
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 // --- WORKSPACE VIEW AND EDIT ---
