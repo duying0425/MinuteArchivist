@@ -5,6 +5,8 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h/MinuteArchivist
+Environment=HF_ENDPOINT=https://hf-mirror.com
+Environment=HF_HUB_DISABLE_XET=1
 ExecStart=%h/MinuteArchivist/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8090
 Restart=always
 RestartSec=5
