@@ -23,14 +23,12 @@ def get_feishu_auth_url(state: str) -> str:
     """
     Generate Feishu OAuth Authorize URL.
     """
-    scopes = "offline_access minutes:minutes:update minutes:minutes.artifacts:read minutes:minutes.basic:read minutes:minutes.media:export minutes:minutes.search:read minutes:minutes.statistics:read minutes:minutes.transcript:export minutes:minutes.upload:write"
-    encoded_scopes = scopes.replace(" ", "%20")
     return (
         f"https://open.feishu.cn/open-apis/authen/v1/index"
         f"?app_id={settings.FEISHU_APP_ID}"
         f"&redirect_uri={settings.FEISHU_REDIRECT_URI}"
         f"&state={state}"
-        f"&scope={encoded_scopes}"
+        f"&scope=offline_access"
     )
 
 def exchange_code_for_token(code: str) -> dict:
