@@ -18,21 +18,20 @@ def run_real_asr(audio_path: str, progress_callback) -> Tuple[str, float]:
     """
     # Initialize Whisper model (using base on CPU as default)
     # Note: In production, device="cuda" should be used if GPU is available
+    progress_callback(8, "正在加载 ASR 模型...")
     model = WhisperModel("base", device="cpu", compute_type="int8")
 
-    progress_callback(10, "正在加载音频并进行初始化...")
+    progress_callback(12, "正在加载音频并进行初始化...")
     segments, info = model.transcribe(audio_path, beam_size=5)
 
-    duration = info.duration
+    duration = info.duration or 0.0
 
-    # Process segments
+    # Process segments — iterate the generator directly so progress updates
+    # incrementally as transcription proceeds (list(segments) would block until
+    # the entire audio is transcribed, freezing the progress bar at 10%).
     transcript_lines = []
-
-    # Convert generator to list to track progress
-    segments_list = list(segments)
-    total_segments = len(segments_list)
-
-    for i, segment in enumerate(segments_list):
+    seg_count = 0
+    for segment in segments:
         # Format time to [HH:MM:SS]
         start_time = segment.start
         hours = int(start_time // 3600)
@@ -47,9 +46,15 @@ def run_real_asr(audio_path: str, progress_callback) -> Tuple[str, float]:
         line = f"{timestamp} {speaker}：{segment.text.strip()}"
         transcript_lines.append(line)
 
-        # Update progress based on segments processed
-        current_progress = int(10 + (i + 1) / total_segments * 85)
-        progress_callback(min(current_progress, 95), f"已转写 {i+1}/{total_segments} 个音频片段...")
+        seg_count += 1
+        # Estimate progress by processed audio duration when available,
+        # otherwise fall back to a per-segment heuristic.
+        if duration > 0:
+            ratio = min(segment.end / duration, 1.0)
+        else:
+            ratio = min(seg_count / max(seg_count + 8, 16), 1.0)
+        current_progress = int(10 + ratio * 85)
+        progress_callback(min(current_progress, 95), f"已转写 {seg_count} 个片段（{timestamp}）...")
 
     return "\n".join(transcript_lines), duration
 
