@@ -240,17 +240,38 @@ function handleFeishuAction() {
         const left = (screen.width - width) / 2;
         const top = (screen.height - height) / 2;
         
+        // Pre-open the popup window to avoid modern browser popup blocker
+        const authWindow = window.open('about:blank', 'feishu_auth_popup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`);
+        if (!authWindow) {
+            showToast('浏览器拦截了弹出窗口，请在浏览器设置中允许此网站的弹出式窗口。', 'error');
+            return;
+        }
+        
+        // Write a loading message into the window
+        authWindow.document.write(`
+            <html>
+            <head><title>正在加载飞书授权...</title></head>
+            <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #121214; color: #e1e1e6;">
+                <div style="font-size: 18px; margin-bottom: 10px;">正在获取授权链接...</div>
+                <div style="color: #8d8d99; font-size: 14px;">请稍候</div>
+            </body>
+            </html>
+        `);
+        
         // Fetch oauth url from API
         apiFetch('/api/auth/feishu/url')
             .then(res => res.json())
             .then(data => {
-                window.open(
-                    data.url, 
-                    'feishu_auth_popup', 
-                    `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
-                );
+                if (data.url) {
+                    authWindow.location.href = data.url;
+                } else {
+                    throw new Error('未返回有效的授权 URL');
+                }
             })
-            .catch(err => showToast('无法获取飞书授权地址', 'error'));
+            .catch(err => {
+                authWindow.close();
+                showToast('无法获取飞书授权地址', 'error');
+            });
     }
 }
 
@@ -277,16 +298,37 @@ function handleFeishuLogin() {
     const left = (screen.width - width) / 2;
     const top = (screen.height - height) / 2;
     
+    // Pre-open the popup window to avoid modern browser popup blocker
+    const loginWindow = window.open('about:blank', 'feishu_login_popup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`);
+    if (!loginWindow) {
+        showToast('浏览器拦截了弹出窗口，请在浏览器设置中允许此网站的弹出式窗口。', 'error');
+        return;
+    }
+    
+    // Write a loading message into the window
+    loginWindow.document.write(`
+        <html>
+        <head><title>正在加载飞书登录...</title></head>
+        <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #121214; color: #e1e1e6;">
+            <div style="font-size: 18px; margin-bottom: 10px;">正在获取登录链接...</div>
+            <div style="color: #8d8d99; font-size: 14px;">请稍候</div>
+        </body>
+        </html>
+    `);
+    
     fetch('/api/auth/feishu/login_url')
         .then(res => res.json())
         .then(data => {
-            window.open(
-                data.url, 
-                'feishu_login_popup', 
-                `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
-            );
+            if (data.url) {
+                loginWindow.location.href = data.url;
+            } else {
+                throw new Error('未返回有效的登录 URL');
+            }
         })
-        .catch(err => showToast('无法获取飞书授权登录地址', 'error'));
+        .catch(err => {
+            loginWindow.close();
+            showToast('无法获取飞书授权登录地址', 'error');
+        });
 }
 
 // Listen to Feishu auth success/login messages from OAuth popup
