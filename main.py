@@ -169,7 +169,7 @@ def process_local_task(task_id: str):
                 title=task.title or task.filename,
                 filename=task.filename,
                 method="local",
-                duration_seconds=task.duration or 81.0,
+                duration_seconds=task.duration or 0.0,
                 raw_text=task.result_markdown,
                 speaker_map=speaker_map,
                 username=task.user.username
