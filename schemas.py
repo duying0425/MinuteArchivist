@@ -59,5 +59,5 @@ class TaskResponse(BaseModel):
         from_attributes = True
         # Resolve SQLAlchemy relation to return dictionary speaker_map
         json_encoders = {
-            datetime: lambda v: v.isoformat()
+            datetime: lambda v: v.isoformat() + "Z"
         }

@@ -501,7 +501,11 @@ function renderTaskList(tasks) {
     
     let html = '';
     tasks.forEach(task => {
-        const dateStr = new Date(task.created_at).toLocaleString();
+        // Append 'Z' to timezone-naive UTC datetime strings from backend to parse correctly in browser local time
+        const cleanCreatedAt = task.created_at && !task.created_at.endsWith('Z') && !task.created_at.includes('+')
+            ? task.created_at + 'Z'
+            : task.created_at;
+        const dateStr = new Date(cleanCreatedAt).toLocaleString();
         const durationStr = task.duration ? formatDuration(task.duration) : '--';
         
         // Progress render
