@@ -1015,3 +1015,25 @@ h3 {
     box-shadow: 0 6px 20px rgba(51, 112, 255, 0.4);
     color: #ffffff;
 }
+
+/* Browser extension download button (below Feishu login) */
+.btn-extension {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px dashed var(--border-color);
+    margin-top: 10px;
+    font-size: 13px;
+    text-decoration: none;
+    transition: all 0.25s ease;
+}
+
+.btn-extension:hover {
+    color: var(--text);
+    border-color: #6e7681;
+    background: rgba(110, 118, 129, 0.08);
+    transform: translateY(-1px);
+}
+
+.btn-extension i {
+    margin-right: 2px;
+}
