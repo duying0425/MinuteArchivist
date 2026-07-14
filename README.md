@@ -53,6 +53,56 @@
 
 ---
 
+## 🧪 测试
+
+项目内置完整的单元测试与 API 集成测试套件（基于 pytest + FastAPI TestClient），覆盖核心业务逻辑与全部 API 端点。
+
+### 测试依赖
+
+测试依赖独立管理在 [requirements-dev.txt](requirements-dev.txt) 中，不污染生产依赖：
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+### 运行测试
+
+在项目根目录执行：
+
+```powershell
+# 运行全部测试
+.venv\Scripts\python.exe -m pytest tests/
+
+# 运行单个测试文件
+.venv\Scripts\python.exe -m pytest tests/test_parser.py
+
+# 显示详细输出
+.venv\Scripts\python.exe -m pytest tests/ -v
+```
+
+### 测试覆盖范围
+
+| 测试文件 | 用例数 | 覆盖内容 |
+| :--- | :---: | :--- |
+| `tests/test_parser.py` | 25 | 飞书妙记格式解析、旧格式解析、空输入兜底、多行内容合并、Markdown 生成、说话人映射、时长格式化 |
+| `tests/test_auth.py` | 7 | bcrypt 密码哈希与校验、JWT 签发/解码/过期校验 |
+| `tests/test_feishu.py` | 12 | minute_token 提取、OAuth URL scope 约束、机器人卡片消息 payload 构造 |
+| `tests/test_api_auth.py` | 15 | 注册/登录/获取当前用户/飞书绑定 URL/解绑 |
+| `tests/test_api_tasks.py` | 31 | 任务 CRUD、下载、说话人映射重编译、权限隔离、公共下载、文件名安全化 |
+| `tests/test_api_webhook.py` | 11 | URL Verification 握手、录制就绪/妙记生成事件分发、无绑定用户忽略 |
+| `tests/test_api_misc.py` | 8 | ASR 状态、静态首页、版本号注入、`no-store` 缓存头 |
+| **合计** | **109** | 全部通过 ✅ |
+
+### 测试设计要点
+
+- **内存数据库隔离**：[tests/conftest.py](tests/conftest.py) 在导入项目模块前将 `DATABASE_URL` 设置为共享内存 SQLite，并 patch `sqlalchemy.create_engine` 使用 `StaticPool`，确保测试完全不污染真实 `data/` 目录。
+- **后台任务 Mock**：通过 autouse fixture 自动 patch `process_feishu_task` / `process_local_task`，避免触发真实飞书 API 或本地 ASR 外部调用。
+- **临时目录隔离**：`isolated_dirs` fixture 将 `OUTPUT_DIR` / `UPLOAD_DIR` 重定向到 pytest 的 `tmp_path`，测试产物自动清理。
+- **Webhook 事件捕获**：monkeypatch `BackgroundTasks.add_task` 捕获事件分发调用，验证事件路由逻辑而不实际执行后台任务。
+- **关键约束验证**：测试覆盖了 [project_memory](.trae-cn/memory) 中记录的硬约束，包括 OAuth scope 必含三项权限、静态资源 `Cache-Control: no-store`、下载文件名非法字符替换等。
+
+---
+
 ## 🌐 阿里云生产环境部署指南
 
 妙记归档员在云端作为**系统后台服务 (Systemd User Service)** 运行，并通过 **Nginx 反向代理** 结合 **Cloudflare CDN/SSL** 暴露安全 HTTPS 公网链接。
