@@ -1034,6 +1034,12 @@ h3 {
     transform: translateY(-1px);
 }
 
+.btn-extension.btn-edge:hover {
+    color: #0078d4;
+    border-color: #0078d4;
+    background: rgba(0, 120, 212, 0.12);
+}
+
 .btn-extension i {
-    margin-right: 2px;
+    margin-right: 6px;
 }
